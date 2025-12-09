@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>706良渚 Creator House | social tech 黑客松</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;500;700&family=Inter:wght@300;400;600&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f5f5f4; /* Stone 100 */
+            color: #1c1917; /* Stone 900 */
+            overflow: hidden; 
+        }
+        
+        .serif {
+            font-family: 'Noto Serif SC', serif;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .slide-container {
+            height: 100vh;
+            width: 100vw;
+            overflow-y: scroll;
+            scroll-snap-type: y mandatory;
+            scroll-behavior: smooth;
+        }
+
+        .slide {
+            height: 100vh;
+            width: 100vw;
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            padding: 2rem;
+        }
+
+        .fade-in-up {
+            animation: fadeInUp 0.8s ease-out forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        @keyframes fadeInUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .delay-100 { animation-delay: 0.1s; }
+        .delay-200 { animation-delay: 0.2s; }
+        .delay-300 { animation-delay: 0.3s; }
+        
+        /* Loading Spinner */
+        .spinner {
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border-left-color: #4f46e5;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Markdown-like output styling */
+        .ai-output ul { list-style-type: disc; margin-left: 1.5rem; margin-top: 0.5rem; }
+        .ai-output li { margin-bottom: 0.25rem; }
+        .ai-output strong { color: #4338ca; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const apiKey = ""; // System will inject key at runtime
+
+        // --- Gemini Service ---
+        const callGemini = async (prompt) => {
+            try {
+                const response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }]
+                        })
+                    }
+                );
+                const data = await response.json();
+                if (data.error) throw new Error(data.error.message);
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || "No response generated.";
+            } catch (error) {
+                console.error("Gemini Error:", error);
+                return "AI 暂时休息中，请稍后再试 (Error: " + error.message + ")";
+            }
+        };
+
+        // --- Local Icons ---
+        const Icons = {
+            ArrowDown: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>,
+            Users: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>,
+            Brain: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"></path><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"></path></svg>,
+            PenTool: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m12 19 7-7 3 3-7 7-3-3z"></path><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="m2 2 7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>,
+            Code: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>,
+            MapPin: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>,
+            Calendar: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>,
+            Search: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>,
+            Lightbulb: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="9" y1="18" x2="15" y2="18"></line><line x1="10" y1="22" x2="14" y2="22"></line><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 12 2a4.65 4.65 0 0 0-4.5 5.5c.75.76 1.22 1.52 1.4 2.5"></path></svg>,
+            Sparkles: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>,
+            X: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
+            Send: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
+            HelpCircle: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+            Coffee: ({size=24, className}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+        };
+
+        const { ArrowDown, Users, Brain, PenTool, Code, MapPin, Calendar, Search, Lightbulb, Sparkles, X, Send, HelpCircle, Coffee } = Icons;
+
+        const Icon = ({ icon: IconComponent, size = 24, className }) => {
+            if (!IconComponent) return null;
+            return <IconComponent size={size} className={className} />;
+        };
+
+        // --- Shared AI Modal Component ---
+        const AIModal = ({ isOpen, onClose, title, children }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="p-4 border-b border-stone-100 flex justify-between items-center bg-indigo-50">
+                            <h3 className="font-bold text-indigo-900 flex items-center gap-2">
+                                <Icon icon={Sparkles} size={18} className="text-indigo-500" />
+                                {title}
+                            </h3>
+                            <button onClick={onClose} className="text-stone-400 hover:text-stone-800 transition-colors">
+                                <Icon icon={X} size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6 overflow-y-auto">
+                            {children}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- NEW: Page Indicator Component ---
+        const PageIndicator = ({ current, total }) => (
+            <div className="fixed bottom-8 right-8 z-40 font-mono text-stone-400 text-sm tracking-widest select-none pointer-events-none fade-in-up">
+                <span className="text-stone-800 font-bold">{String(current + 1).padStart(2, '0')}</span>
+                <span className="mx-2">/</span>
+                <span>{String(total).padStart(2, '0')}</span>
+            </div>
+        );
+
+        const App = () => {
+            const containerRef = useRef(null);
+            const [activeIndex, setActiveIndex] = useState(0);
+
+            // AI State
+            const [showIdeaGenerator, setShowIdeaGenerator] = useState(false);
+            const [showBiasDetector, setShowBiasDetector] = useState(false);
+
+            useEffect(() => {
+                const container = containerRef.current;
+                const handleScroll = () => {
+                    const slideHeight = container.clientHeight;
+                    const index = Math.round(container.scrollTop / slideHeight);
+                    setActiveIndex(index);
+                };
+                container.addEventListener('scroll', handleScroll);
+                return () => container.removeEventListener('scroll', handleScroll);
+            }, []);
+
+            const scrollToSlide = (index) => {
+                containerRef.current.scrollTo({
+                    top: index * containerRef.current.clientHeight,
+                    behavior: 'smooth'
+                });
+            };
+
+            const slides = [
+                <CoverSlide />,
+                <OriginSlide />,
+                <ThemeSlide />,
+                <TracksSlide onOpenGenerator={() => setShowIdeaGenerator(true)} />,
+                <ExamplesSlide onOpenBias={() => setShowBiasDetector(true)} />,
+                <WhySlide />,
+                <LocationSlide />,
+                <ScheduleSlide />,
+                <PersonaSlide />,
+                <PartnersSlide />,
+                <FAQSlide />,
+                <FooterSlide />
+            ];
+
+            return (
+                <div className="relative">
+                    <SlideNavigation activeIndex={activeIndex} totalSlides={slides.length} scrollToSlide={scrollToSlide} />
+                    
+                    {/* Add PageIndicator here */}
+                    <PageIndicator current={activeIndex} total={slides.length} />
+
+                    <div ref={containerRef} className="slide-container no-scrollbar">
+                        {slides.map((slide, index) => (
+                            <div key={index} className="slide bg-stone-50 border-b border-stone-200">
+                                {slide}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Feature 1: Social Tech Idea Generator */}
+                    <IdeaGeneratorModal isOpen={showIdeaGenerator} onClose={() => setShowIdeaGenerator(false)} />
+
+                    {/* Feature 2: Bias Detector Demo */}
+                    <BiasDetectorModal isOpen={showBiasDetector} onClose={() => setShowBiasDetector(false)} />
+                </div>
+            );
+        };
+
+        // --- Feature 1 Component: Idea Generator ---
+        const IdeaGeneratorModal = ({ isOpen, onClose }) => {
+            const [role, setRole] = useState("程序员");
+            const [topic, setTopic] = useState("");
+            const [result, setResult] = useState(null);
+            const [loading, setLoading] = useState(false);
+
+            const handleGenerate = async () => {
+                if (!topic) return;
+                setLoading(true);
+                setResult(null);
+                
+                const prompt = `作为一个 Social Tech 黑客松导师，请为一个【${role}】针对【${topic}】这个议题生成一个项目灵感。
+                请严格按照以下三个维度输出一个简短的方案（每个维度一句话）：
+                1. 研究视角（Research）：我们要观察什么社会结构或互动？
+                2. 媒体叙事（Media）：如何用有创意的方式讲述这个故事？
+                3. 产品原型（Product）：做一个什么样的小工具或介入机制？
+                语言风格要智性、温和、有洞察力。请用中文回答。`;
+
+                const text = await callGemini(prompt);
+                setResult(text);
+                setLoading(false);
+            };
+
+            return (
+                <AIModal isOpen={isOpen} onClose={onClose} title="Social Tech 灵感生成器">
+                    <p className="text-sm text-stone-600 mb-4">输入你关心的议题和你的身份，Gemini 将为你生成一个融合研究、媒体与产品的跨界方案。</p>
+                    
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-stone-500 uppercase mb-1">你的角色</label>
+                            <select 
+                                value={role} 
+                                onChange={(e) => setRole(e.target.value)}
+                                className="w-full p-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                            >
+                                <option value="程序员">💻 程序员 (Developer)</option>
+                                <option value="媒体人">🖋️ 媒体人 (Writer/Creator)</option>
+                                <option value="社科研究员">🔍 社科研究员 (Researcher)</option>
+                                <option value="人类观察家">👀 人类观察家 (Observer)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-stone-500 uppercase mb-1">感兴趣的议题</label>
+                            <input 
+                                type="text" 
+                                value={topic}
+                                onChange={(e) => setTopic(e.target.value)}
+                                placeholder="例如：外卖员困境、算法相亲、城市孤独、适老化..."
+                                className="w-full p-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                        </div>
+                        <button 
+                            onClick={handleGenerate}
+                            disabled={loading || !topic}
+                            className={`w-full py-3 rounded-lg font-bold text-white flex justify-center items-center gap-2 transition-all ${
+                                loading || !topic ? 'bg-indigo-300 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow-md hover:shadow-lg'
+                            }`}
+                        >
+                            {loading ? <div className="spinner border-white/20 border-l-white"></div> : <><Icon icon={Sparkles} size={18} /> 生成灵感方案</>}
+                        </button>
+                    </div>
+
+                    {result && (
+                        <div className="mt-6 bg-stone-50 p-4 rounded-xl border border-stone-100 animate-fade-in">
+                            <h4 className="font-bold text-stone-800 mb-2 flex items-center gap-2">
+                                <Icon icon={Brain} size={16} /> Gemini 的建议：
+                            </h4>
+                            <div className="text-sm text-stone-700 leading-relaxed whitespace-pre-wrap ai-output">
+                                {result}
+                            </div>
+                        </div>
+                    )}
+                </AIModal>
+            );
+        };
+
+        // --- Feature 2 Component: Bias Detector ---
+        const BiasDetectorModal = ({ isOpen, onClose }) => {
+            const [input, setInput] = useState("");
+            const [analysis, setAnalysis] = useState(null);
+            const [loading, setLoading] = useState(false);
+
+            const handleAnalyze = async () => {
+                if (!input) return;
+                setLoading(true);
+                setAnalysis(null);
+
+                const prompt = `你是一个辅助沟通的 AI 教练。请分析这句话：“${input}”。
+                1. 指出这句话中可能隐含的“情绪偏见”或“暴力沟通”成分（如果有）。
+                2. 基于“非暴力沟通”原则，给出一个更温和、更能促进理解的修改建议。
+                请保持简短、友善。`;
+
+                const text = await callGemini(prompt);
+                setAnalysis(text);
+                setLoading(false);
+            };
+
+            return (
+                <AIModal isOpen={isOpen} onClose={onClose} title="偏见觉察工具 Demo">
+                    <p className="text-sm text-stone-600 mb-4">
+                        这是“产品松”赛道的一个构想原型。输入一句你在沟通中容易脱口而出的话，AI 将帮你觉察其中的情绪预设。
+                    </p>
+                    <div className="relative">
+                        <textarea
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            placeholder="输入一句话，例如：'你怎么老是不回我消息？' 或 '这方案根本行不通'..."
+                            className="w-full p-3 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[100px] resize-none"
+                        />
+                        <button 
+                            onClick={handleAnalyze}
+                            disabled={loading || !input}
+                            className="absolute bottom-3 right-3 p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 disabled:bg-stone-300 transition-colors"
+                        >
+                            {loading ? <div className="spinner border-white/20 border-l-white w-4 h-4"></div> : <Icon icon={Send} size={16} />}
+                        </button>
+                    </div>
+                    
+                    {analysis && (
+                        <div className="mt-6 bg-indigo-50 p-4 rounded-xl border border-indigo-100 animate-fade-in">
+                            <h4 className="font-bold text-indigo-900 mb-2 flex items-center gap-2">
+                                <Icon icon={Sparkles} size={16} /> 觉察与重构：
+                            </h4>
+                            <div className="text-sm text-stone-700 leading-relaxed whitespace-pre-wrap ai-output">
+                                {analysis}
+                            </div>
+                        </div>
+                    )}
+                </AIModal>
+            );
+        }
+
+        // --- Slide Components ---
+
+        const SlideNavigation = ({ activeIndex, totalSlides, scrollToSlide }) => (
+            <div className="fixed right-6 top-1/2 transform -translate-y-1/2 z-50 flex flex-col gap-3">
+                {Array.from({ length: totalSlides }).map((_, idx) => (
+                    <button
+                        key={idx}
+                        onClick={() => scrollToSlide(idx)}
+                        className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                            activeIndex === idx ? 'bg-stone-800 scale-125' : 'bg-stone-400 hover:bg-stone-600'
+                        }`}
+                        title={`Slide ${idx + 1}`}
+                    />
+                ))}
+            </div>
+        );
+
+        const CoverSlide = () => (
+            <div className="max-w-4xl w-full text-center space-y-8 fade-in-up">
+                <div className="uppercase tracking-widest text-stone-500 font-medium">Create · Connect · Co-live</div>
+                <h1 className="text-4xl md:text-6xl font-bold text-stone-900 serif leading-tight">
+                    706 良渚 creator house<br/>
+                    <span className="text-stone-600">Social Tech 驻留</span>
+                </h1>
+                <div className="w-24 h-1 bg-stone-800 mx-auto my-6"></div>
+                <h2 className="text-xl md:text-2xl text-stone-700 font-light max-w-2xl mx-auto">
+                    开发者、媒体人与研究员的 12 天创作黑客松
+                </h2>
+                <div className="flex flex-col md:flex-row justify-center items-center gap-6 mt-12 text-stone-600">
+                    <div className="flex items-center gap-2">
+                        <Icon icon={Calendar} size={20} />
+                        <span>2025.12.23 — 2026.01.03</span>
+                    </div>
+                    <div className="hidden md:block">|</div>
+                    <div className="flex items-center gap-2">
+                        <Icon icon={MapPin} size={20} />
+                        <span>杭州 · 良渚文化村</span>
+                    </div>
+                </div>
+                <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 animate-bounce text-stone-400">
+                    <Icon icon={ArrowDown} size={32} />
+                </div>
+            </div>
+        );
+
+        const OriginSlide = () => (
+            <div className="max-w-5xl w-full flex flex-col md:flex-row gap-12 items-center">
+                <div className="md:w-1/2 space-y-6 fade-in-up">
+                    <h3 className="text-3xl font-bold serif text-stone-800">缘起：<br/>这不仅仅是写代码</h3>
+                    <p className="text-lg text-stone-600 leading-relaxed">
+                        传统的 Hacker House 是开发者的乐园，但往往局限于技术本身。我们想做一点不一样的事：做一个<b>“三松合一”</b>的实验场。
+                    </p>
+                    <p className="text-lg text-stone-600 leading-relaxed">
+                        当开发者、媒体人和社科生在同一时间、同一地点共同面对一个快速变化的世界时，单一学科已经不足以理解正在发生的变化。
+                    </p>
+                    <div className="p-6 bg-white border-l-4 border-stone-800 shadow-sm">
+                        <p className="italic text-stone-700">
+                            “我们希望以‘创造者共居社群’的形式，在 AI 时代重新夺回注意力，拓展创作的机会，并学习如何成为更好的‘人机协同者’。”
+                        </p>
+                    </div>
+                </div>
+                <div className="md:w-1/2 grid grid-cols-2 gap-4 fade-in-up delay-200">
+                    <div className="aspect-square bg-stone-200 rounded-lg flex items-center justify-center p-4 text-center">
+                        <div>
+                            <Icon icon={Code} size={32} className="mx-auto mb-2 text-stone-600"/>
+                            <span className="font-bold block">技术</span>
+                            <span className="text-xs text-stone-500">工具与系统</span>
+                        </div>
+                    </div>
+                    <div className="aspect-square bg-stone-800 rounded-lg flex items-center justify-center p-4 text-center text-white">
+                        <div>
+                            <Icon icon={Users} size={32} className="mx-auto mb-2"/>
+                            <span className="font-bold block">连接</span>
+                            <span className="text-xs text-stone-400">共居与共创</span>
+                        </div>
+                    </div>
+                    <div className="aspect-square bg-stone-300 rounded-lg flex items-center justify-center p-4 text-center">
+                        <div>
+                            <Icon icon={PenTool} size={32} className="mx-auto mb-2 text-stone-600"/>
+                            <span className="font-bold block">叙事</span>
+                            <span className="text-xs text-stone-500">表达与传播</span>
+                        </div>
+                    </div>
+                    <div className="aspect-square bg-stone-200 rounded-lg flex items-center justify-center p-4 text-center">
+                        <div>
+                            <Icon icon={Brain} size={32} className="mx-auto mb-2 text-stone-600"/>
+                            <span className="font-bold block">洞察</span>
+                            <span className="text-xs text-stone-500">社会与结构</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const ThemeSlide = () => (
+            <div className="max-w-4xl w-full text-center space-y-8 fade-in-up">
+                <div className="inline-block px-4 py-1 rounded-full bg-stone-200 text-stone-700 text-sm font-semibold tracking-wide mb-4">
+                    本期核心主题
+                </div>
+                <h3 className="text-4xl md:text-5xl font-bold serif text-stone-900">
+                    社会技术 Social Tech
+                </h3>
+                <p className="text-xl text-stone-600 max-w-3xl mx-auto leading-relaxed">
+                    一套介于制度分析与日常实践之间的中观方法。<br/>
+                    理解人与系统互动的分析视角。
+                </p>
+                
+                <div className="grid md:grid-cols-3 gap-8 mt-12 text-left">
+                    <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                        <h4 className="font-bold text-lg mb-2 flex items-center gap-2">
+                            <Icon icon={Code} size={18} /> 对开发者
+                        </h4>
+                        <p className="text-sm text-stone-600">
+                            技术系统如何嵌入社会互动、影响情绪调节与行为决策。让编码对广义上的社会互动造成积极影响。
+                        </p>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                        <h4 className="font-bold text-lg mb-2 flex items-center gap-2">
+                            <Icon icon={PenTool} size={18} /> 对媒体人
+                        </h4>
+                        <p className="text-sm text-stone-600">
+                            叙事结构、媒介选择与算法推荐之间的共构关系。探索信息流组织方式的再设计。
+                        </p>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                        <h4 className="font-bold text-lg mb-2 flex items-center gap-2">
+                            <Icon icon={Search} size={18} /> 对社科研究者
+                        </h4>
+                        <p className="text-sm text-stone-600">
+                            检视“技术—主体—结构”三者循环的操作性框架。解释数字环境如何形塑身份与关系。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+
+        // Updated TracksSlide with AI Feature Trigger
+        const TracksSlide = ({ onOpenGenerator }) => (
+            <div className="max-w-6xl w-full">
+                <div className="flex flex-col items-center mb-12 fade-in-up">
+                    <h3 className="text-3xl font-bold serif text-stone-800 mb-4 text-center">三大创作方向</h3>
+                    <button 
+                        onClick={onOpenGenerator}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full flex items-center gap-2 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1"
+                    >
+                        <Icon icon={Sparkles} size={18} />
+                        <span>✨ 不知道做什么？ AI 灵感生成器</span>
+                    </button>
+                </div>
+
+                <div className="grid md:grid-cols-3 gap-6">
+                    {/* Track 1 */}
+                    <div className="group relative bg-white border border-stone-200 rounded-2xl p-8 hover:border-stone-400 transition-all duration-300 fade-in-up delay-100">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Icon icon={Search} size={80} />
+                        </div>
+                        <h4 className="text-2xl font-bold mb-4 text-stone-800">研究松</h4>
+                        <p className="text-stone-500 text-sm mb-6 uppercase tracking-wider">Research Hackathon</p>
+                        <p className="text-stone-600 mb-4">以社会科学的视角观察技术与社会的互动。</p>
+                        <ul className="text-sm text-stone-500 space-y-2 list-disc pl-4">
+                            <li>探讨算法、劳动与身份再定义</li>
+                            <li>建立理解时代机制新框架</li>
+                            <li>输出接地气、深度的洞察</li>
+                        </ul>
+                    </div>
+
+                    {/* Track 2 */}
+                    <div className="group relative bg-stone-900 border border-stone-800 rounded-2xl p-8 text-white transition-all duration-300 transform md:-translate-y-4 shadow-xl fade-in-up delay-200">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Icon icon={PenTool} size={80} color="white"/>
+                        </div>
+                        <h4 className="text-2xl font-bold mb-4">媒体松</h4>
+                        <p className="text-stone-400 text-sm mb-6 uppercase tracking-wider">Media Hackathon</p>
+                        <p className="text-stone-300 mb-4">关注叙事与传播的重构，尝试新的内容形式。</p>
+                        <ul className="text-sm text-stone-400 space-y-2 list-disc pl-4">
+                            <li>探索算法洪流中的有效传播</li>
+                            <li>找到更打动人的话题</li>
+                            <li>创造新型媒介语言</li>
+                        </ul>
+                    </div>
+
+                    {/* Track 3 */}
+                    <div className="group relative bg-white border border-stone-200 rounded-2xl p-8 hover:border-stone-400 transition-all duration-300 fade-in-up delay-300">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Icon icon={Lightbulb} size={80} />
+                        </div>
+                        <h4 className="text-2xl font-bold mb-4 text-stone-800">产品松</h4>
+                        <p className="text-stone-500 text-sm mb-6 uppercase tracking-wider">Product Hackathon</p>
+                        <p className="text-stone-600 mb-4">以编程与系统思维为工具，探索协作边界。</p>
+                        <ul className="text-sm text-stone-500 space-y-2 list-disc pl-4">
+                            <li>AI 与人类协作的小型工具</li>
+                            <li>自我更新与创造的能力</li>
+                            <li>解决具体微小的互动痛点</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        );
+
+        // Updated ExamplesSlide with AI Feature Trigger
+        const ExamplesSlide = ({ onOpenBias }) => {
+            const [activeTab, setActiveTab] = useState('product');
+
+            const examples = {
+                product: [
+                    { title: "偏见觉察工具", pain: "我常常误解别人", output: "偏见自检清单/提示卡", effect: "降低无意识偏见，源头减少误解", hasAI: true },
+                    { title: "深度对话提示器", pain: "聊天聊不深，停在表面", output: "结构化对话动作表", effect: "突破表层沟通，形成真实交流" },
+                    { title: "社交连接小卡片", pain: "不知如何开启深度对话", output: "可视化问题库", effect: "降低社交陌生感，建立情感连接" }
+                ],
+                research: [
+                    { title: "关系判断盲区图谱", pain: "搞不清别人真正的在意点", output: "可视化模型", effect: "减少情绪化推断" },
+                    { title: "数字情绪放大机制", pain: "情绪被信息流放大", output: "机制流程图", effect: "区分真实情绪与技术放大" },
+                    { title: "社交权力分布观察", pain: "在某些场合容易被忽视", output: "观察表/模型", effect: "理解不对等原因，改善互动" }
+                ],
+                media: [
+                    { title: "复杂情绪叙事短片", pain: "知道感受但讲不出来", output: "情绪叙事长/短视频", effect: "多感官线索理解复杂情绪" },
+                    { title: "算法对照实验播客", pain: "平台把表达推向不想去的方向", output: "两版对比播客节目", effect: "直观展示算法对叙事的介入" },
+                    { title: "跨领域对话交互页", pain: "跨学科交流鸡同鸭讲", output: "多语言系统专题网页", effect: "提供低门槛理解入口" }
+                ]
+            };
+
+            return (
+                <div className="max-w-5xl w-full fade-in-up">
+                    <h3 className="text-3xl font-bold serif text-stone-800 mb-8 text-center">我们期待什么样的产出？</h3>
+                    
+                    <div className="flex justify-center mb-8 gap-4">
+                        {['product', 'research', 'media'].map(tab => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className={`px-6 py-2 rounded-full capitalize transition-all ${
+                                    activeTab === tab 
+                                    ? 'bg-stone-800 text-white shadow-lg' 
+                                    : 'bg-stone-200 text-stone-600 hover:bg-stone-300'
+                                }`}
+                            >
+                                {tab === 'product' ? '产品松示例' : tab === 'research' ? '研究松示例' : '媒体松示例'}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="grid md:grid-cols-3 gap-6">
+                        {examples[activeTab].map((item, idx) => (
+                            <div key={idx} className="bg-white p-6 rounded-xl border-t-4 border-stone-800 shadow-sm flex flex-col h-full animate-fade-in relative group">
+                                <h4 className="font-bold text-xl mb-3 text-stone-900 flex justify-between items-start">
+                                    {item.title}
+                                    {item.hasAI && (
+                                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full flex items-center gap-1">
+                                            <Icon icon={Sparkles} size={10} /> AI Ready
+                                        </span>
+                                    )}
+                                </h4>
+                                <div className="mb-4">
+                                    <span className="text-xs font-bold text-red-500 uppercase">Pain Point</span>
+                                    <p className="text-sm text-stone-600 italic">"{item.pain}"</p>
+                                </div>
+                                <div className="mt-auto space-y-2">
+                                    <div className="text-sm bg-stone-50 p-2 rounded">
+                                        <span className="font-semibold block text-stone-800">产出:</span> {item.output}
+                                    </div>
+                                    <div className="text-sm bg-stone-50 p-2 rounded">
+                                        <span className="font-semibold block text-stone-800">效果:</span> {item.effect}
+                                    </div>
+                                </div>
+                                {item.hasAI && (
+                                    <button 
+                                        onClick={onOpenBias}
+                                        className="mt-4 w-full py-2 bg-indigo-50 text-indigo-700 text-sm font-bold rounded-lg hover:bg-indigo-600 hover:text-white transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <Icon icon={Sparkles} size={14} /> ✨ 试玩 Demo
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const WhySlide = () => (
+            <div className="max-w-4xl w-full flex flex-col items-center text-center fade-in-up">
+                <h3 className="text-3xl font-bold serif text-stone-800 mb-12">为什么三松合一？</h3>
+                
+                <div className="relative flex flex-col md:flex-row items-center justify-center gap-8 w-full">
+                    <div className="w-64 p-6 bg-white rounded-xl shadow-lg z-10">
+                        <div className="text-4xl mb-2">👁️</div>
+                        <h4 className="font-bold mb-2">研究松</h4>
+                        <p className="text-sm text-stone-600">看清结构</p>
+                    </div>
+                    
+                    <div className="hidden md:block absolute top-1/2 left-0 w-full h-0.5 bg-stone-300 -z-0"></div>
+                    
+                    <div className="w-64 p-6 bg-stone-800 text-white rounded-xl shadow-lg z-10 transform scale-110">
+                        <div className="text-4xl mb-2">⚡</div>
+                        <h4 className="font-bold mb-2">Social Tech</h4>
+                        <p className="text-sm text-stone-400">洞察转化 · 表达贴近 · 介入浮现</p>
+                    </div>
+
+                    <div className="w-64 p-6 bg-white rounded-xl shadow-lg z-10">
+                        <div className="text-4xl mb-2">🛠️</div>
+                        <h4 className="font-bold mb-2">产品松</h4>
+                        <p className="text-sm text-stone-600">验证与测试</p>
+                    </div>
+                </div>
+                
+                <div className="mt-8">
+                     <div className="w-64 p-6 bg-white rounded-xl shadow-lg z-10 mx-auto">
+                        <div className="text-4xl mb-2">📢</div>
+                        <h4 className="font-bold mb-2">媒体松</h4>
+                        <p className="text-sm text-stone-600">清楚讲述</p>
+                    </div>
+                </div>
+
+                <div className="mt-12 text-lg text-stone-600 max-w-3xl space-y-6">
+                    <p>
+                        它们不是平行的赛道，而是同一件事的三个切面：<br/>
+                        <b>理解、表达与介入。</b>
+                    </p>
+                    <p className="text-base md:text-lg bg-stone-200/50 p-6 rounded-xl border border-stone-200">
+                        我们希望通过“三松合一”，让我们更好地理解当下<b>社交的异化</b>，<br/>
+                        并在此基础上共同探索<b>重新构建真实链接</b>的过程。
+                    </p>
+                </div>
+            </div>
+        );
+
+        const LocationSlide = () => (
+            <div className="max-w-4xl w-full fade-in-up">
+                <div className="space-y-8 text-center">
+                    <h3 className="text-3xl font-bold serif text-stone-800">地点：杭州 · 良渚</h3>
+                    
+                    {/* New Specific Locations Cards */}
+                    <div className="grid md:grid-cols-2 gap-6 my-8">
+                        <div className="bg-white p-8 rounded-xl shadow-md border-t-4 border-stone-800 flex flex-col items-center hover:shadow-lg transition-shadow">
+                            <div className="p-3 bg-stone-100 rounded-full mb-4">
+                                <Icon icon={Users} size={28} className="text-stone-700"/>
+                            </div>
+                            <h4 className="font-bold text-stone-500 text-sm mb-2 uppercase tracking-wider">居住地点</h4>
+                            <p className="text-xl md:text-2xl font-bold text-stone-900 serif">706良渚生活实验室</p>
+                        </div>
+                        <div className="bg-white p-8 rounded-xl shadow-md border-t-4 border-stone-500 flex flex-col items-center hover:shadow-lg transition-shadow">
+                             <div className="p-3 bg-stone-100 rounded-full mb-4">
+                                <Icon icon={Lightbulb} size={28} className="text-stone-700"/>
+                            </div>
+                            <h4 className="font-bold text-stone-500 text-sm mb-2 uppercase tracking-wider">工作地点</h4>
+                            <p className="text-xl md:text-2xl font-bold text-stone-900 serif">良渚玉鸟集</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6 text-stone-700 text-left bg-stone-100 p-8 rounded-2xl">
+                        <p>
+                            <span className="font-bold text-stone-900 block mb-2">为什么要一起住？</span>
+                            共居不是为了营造亲密感，而是让误会、信任、节奏在日常流中自然显露。这种现场经验是 Social Tech 的基础。
+                        </p>
+                        <p>
+                            <span className="font-bold text-stone-900 block mb-2">为什么是良渚？</span>
+                            这里介于城市与乡村之间。生活密度低，空间尺度适合步行。在“可呼吸的节奏”里，让创作从发呆、散步和吃饭中生长出来。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+
+        // --- UPDATED ScheduleSlide with Interactive Cards for Every Node ---
+        const ScheduleSlide = () => {
+            const [activeIdx, setActiveIdx] = useState(3); // Default to D10 (index 3)
+
+            const scheduleData = [
+                {
+                    day: "D1-D3",
+                    title: "启动与观察",
+                    desc: "抵达、破冰、园区参访、社会田野、选题讨论",
+                    cardTitle: "破冰与田野",
+                    cardDesc: "从陌生到熟悉，从园区参访到社会田野。我们在良渚的街头巷尾寻找 Social Tech 的线索，确立各自的选题方向。",
+                    cardIcon: MapPin,
+                    cardColor: "text-emerald-500",
+                    cardBg: "bg-emerald-900",
+                    cardBorder: "border-emerald-700",
+                    cardTag: "Observation",
+                    cardStat: "Location: 良渚文化村"
+                },
+                {
+                    day: "D4-D6",
+                    title: "输入与发酵",
+                    desc: "嘉宾分享、自由创作、夜游、小组深度讨论",
+                    cardTitle: "灵感碰撞",
+                    cardDesc: "行业嘉宾深度分享，夜间围炉夜话。在松散的自由创作时间里，让想法在交流中自然生长。",
+                    cardIcon: Brain,
+                    cardColor: "text-amber-400",
+                    cardBg: "bg-amber-900",
+                    cardBorder: "border-amber-700",
+                    cardTag: "Ideation",
+                    cardStat: "Event: 嘉宾分享 & 夜游"
+                },
+                {
+                    day: "D7-D9",
+                    title: "深潜冲刺",
+                    desc: "全天作品冲刺 (Hackathon Mode On)",
+                    cardTitle: "黑客松冲刺",
+                    cardDesc: "进入心流状态 (Flow State)。全天候的开发与创作，将抽象的洞察转化为可交互的产品、影像或叙事。",
+                    cardIcon: Code,
+                    cardColor: "text-blue-400",
+                    cardBg: "bg-blue-900",
+                    cardBorder: "border-blue-700",
+                    cardTag: "Build",
+                    cardStat: "Mode: Deep Work"
+                },
+                {
+                    day: "D10",
+                    title: "跨年 Demo Night",
+                    desc: "布展、跨年派对 (邀约 ~80 人)、成果展示",
+                    highlight: true,
+                    cardTitle: "Demo Day x 跨年派对",
+                    cardDesc: "驻留期间的 Social Tech 产出，将以展览形式布置在跨年派对现场。这不仅是展示，更是一场“强社交、强链接”的集体实验，对抗技术异化。",
+                    cardIcon: Sparkles,
+                    cardColor: "text-indigo-300",
+                    cardBg: "bg-indigo-900",
+                    cardBorder: "border-indigo-700",
+                    cardTag: "Grand Finale",
+                    cardStat: "预计人数: 80+ | Way to AGI 联动"
+                },
+                {
+                    day: "D11-D12",
+                    title: "沉淀与告别",
+                    desc: "成果复盘、话题交流、团建送别",
+                    cardTitle: "复盘与启程",
+                    cardDesc: "深度的成果复盘。整理这12天的情绪与洞察，带着新的连接回到各自的城市。",
+                    cardIcon: Users,
+                    cardColor: "text-rose-400",
+                    cardBg: "bg-rose-900",
+                    cardBorder: "border-rose-700",
+                    cardTag: "Reflection",
+                    cardStat: "Activity: 团建送别"
+                }
+            ];
+
+            const activeData = scheduleData[activeIdx];
+
+            return (
+                <div className="max-w-6xl w-full fade-in-up h-full flex flex-col justify-center px-4">
+                    <h3 className="text-3xl font-bold serif text-stone-800 mb-2 text-center">12 天共创日程</h3>
+                    <p className="text-stone-500 text-center mb-8">2025.12.23 — 2026.01.03 (跨年)</p>
+                    
+                    <div className="grid md:grid-cols-2 gap-12 items-start">
+                        {/* Left Column: Interactive Timeline */}
+                        <div>
+                            <div className="relative border-l-2 border-stone-300 ml-4 space-y-8 pl-8">
+                                {scheduleData.map((item, idx) => (
+                                    <div 
+                                        key={idx} 
+                                        className={`relative group cursor-pointer transition-all duration-300 ${activeIdx === idx ? 'scale-105 translate-x-2' : 'hover:translate-x-1'}`}
+                                        onMouseEnter={() => setActiveIdx(idx)}
+                                        onClick={() => setActiveIdx(idx)}
+                                    >
+                                        <div className={`absolute -left-[39px] top-1 w-3 h-3 rounded-full border-2 border-white transition-colors duration-300 ${activeIdx === idx || item.highlight ? 'bg-indigo-600 w-4 h-4 -left-[41px]' : 'bg-stone-400 group-hover:bg-stone-600'}`}></div>
+                                        <span className={`block font-bold text-sm mb-1 ${activeIdx === idx || item.highlight ? 'text-indigo-600' : 'text-stone-500'}`}>{item.day}</span>
+                                        <h4 className={`font-bold text-xl transition-colors duration-300 ${activeIdx === idx || item.highlight ? 'text-indigo-600' : 'text-stone-800'}`}>{item.title}</h4>
+                                        <p className="text-sm text-stone-600 mt-1">{item.desc}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Right Column: Dynamic Info Card */}
+                        <div className={`p-8 rounded-2xl shadow-xl relative overflow-hidden transform md:mt-12 transition-all duration-500 ${activeData.cardBg} text-white`}>
+                            {/* Decorative background blob */}
+                            <div className={`absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 rounded-full opacity-20 blur-3xl bg-white`}></div>
+                            
+                            <div className="relative z-10 animate-fade-in key={activeIdx}">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wider border bg-black/20 ${activeData.cardColor} border-white/20`}>
+                                        {activeData.cardTag}
+                                    </span>
+                                </div>
+                                
+                                <h3 className="text-2xl font-bold mb-6 serif leading-tight flex items-center gap-3">
+                                    {activeData.cardTitle}
+                                </h3>
+                                
+                                <div className="space-y-6 min-h-[120px]">
+                                    <div className="flex gap-4">
+                                        <div className="mt-1 p-2 bg-black/20 rounded-lg h-fit">
+                                            <Icon icon={activeData.cardIcon} size={24} className={activeData.cardColor}/>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-gray-100 leading-relaxed">
+                                                {activeData.cardDesc}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-8 pt-6 border-t border-white/10 flex justify-between items-center text-xs text-gray-300 font-mono">
+                                    <span>{activeData.cardStat}</span>
+                                    <span>Hangzhou</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="mt-12 text-center text-sm text-stone-500 max-w-2xl mx-auto">
+                        <span className="hidden md:inline">💡 鼠标悬停左侧时间轴查看详情<br/></span>
+                        利用跨年这个“时间的断点”，重新整理未被说清的感受。
+                    </div>
+                </div>
+            );
+        };
+
+        const PersonaSlide = () => (
+            <div className="max-w-5xl w-full text-center fade-in-up">
+                <h3 className="text-3xl font-bold serif text-stone-800 mb-4">我们在找谁？</h3>
+                
+                <p className="text-indigo-600 font-bold mb-8 bg-indigo-50 inline-block px-4 py-1 rounded-full">
+                    招募 12-16 位驻留者 · 深度共居
+                </p>
+                
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-12">
+                    {[
+                        "浪漫主义者", "人类观察家", "野生社会学家",
+                        "不懂代码的产品经理", "Tinder 资深用户", "技术人文摄影师"
+                    ].map((tag, idx) => (
+                        <div key={idx} className="p-4 border border-stone-300 rounded-lg hover:bg-stone-800 hover:text-white transition-colors cursor-default">
+                            {tag}
+                        </div>
+                    ))}
+                </div>
+
+                <div className="bg-white p-8 rounded-2xl shadow-sm text-left max-w-3xl mx-auto space-y-4">
+                    <p className="text-stone-600">
+                        我们欢迎那些<b>不太符合预期的组合</b>：<br/>
+                        会写代码但做视觉采样的开发者；研究亲密关系但也调试模型的社科生...
+                    </p>
+                    <p className="text-stone-600">
+                        我们希望远离典型的 "Techno-bro" 气质。<br/>
+                        如果您是女性、非二元伙伴，或在技术文化中长期被忽略的创作者，这里是您的主场。
+                    </p>
+                    <div className="pt-4 border-t border-stone-100 mt-4">
+                        <span className="font-bold text-stone-800">活动免费</span> · 仅需带着真诚与开放的心。
+                    </div>
+                </div>
+            </div>
+        );
+
+        // --- NEW Partners Slide ---
+        const PartnersSlide = () => (
+            <div className="max-w-4xl w-full fade-in-up text-center">
+                <h3 className="text-3xl font-bold serif text-stone-800 mb-12">组织机构</h3>
+                
+                <div className="grid gap-8">
+                    {/* Organizer */}
+                    <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-100 hover:shadow-md transition-all">
+                        <div className="inline-block p-3 bg-stone-900 rounded-full mb-4 text-white">
+                            <Icon icon={Users} size={24} />
+                        </div>
+                        <h4 className="text-stone-500 text-sm font-bold uppercase tracking-widest mb-2">主办方</h4>
+                        <h2 className="text-3xl md:text-4xl font-bold text-stone-900 serif mb-4">706青年空间</h2>
+                        <p className="text-stone-600 max-w-lg mx-auto">
+                            706 是一个致力于探索生活可能性、促进青年人连接与公共生活的自治社区。
+                            <br/>良渚 Social Tech Lab 则是我们在技术、社会与生活交叉点的一次新实验。
+                        </p>
+                    </div>
+
+                    {/* Partners */}
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-stone-100 flex flex-col items-center justify-center hover:shadow-md transition-all">
+                            <h4 className="text-stone-500 text-xs font-bold uppercase tracking-widest mb-2">核心社群伙伴</h4>
+                            <h3 className="text-xl font-bold text-stone-800 mb-1">Way to AGI</h3>
+                            <p className="text-sm text-stone-500">中国最大 AI 爱好者社群</p>
+                        </div>
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-stone-100 flex flex-col items-center justify-center hover:shadow-md transition-all">
+                            <h4 className="text-stone-500 text-xs font-bold uppercase tracking-widest mb-2">场地支持伙伴</h4>
+                            <h3 className="text-xl font-bold text-stone-800 mb-1">跳海酒馆</h3>
+                            <p className="text-sm text-stone-500">跨年派对共创空间</p>
+                        </div>
+                    </div>
+
+                    {/* Call for Sponsors */}
+                    <div className="mt-4 p-4 border-2 border-dashed border-stone-300 rounded-xl text-stone-500 text-sm">
+                        <span className="font-bold">虚位以待：</span> 
+                        我们仍在寻找更多赞助伙伴与共创社区，欢迎联系我们！
+                    </div>
+                </div>
+            </div>
+        );
+
+        // --- NEW FAQ Slide ---
+        const FAQSlide = () => {
+            const faqs = [
+                { q: "是否需要专业背景？", a: "不需要。我们欢迎跨界、混合身份或没有明确职业标签的参与者。" },
+                { q: "活动真的免费吗？", a: "是的，驻留本身不收取费用，但我们期望参与者带着真诚的动机与开放的态度加入。" },
+                { q: "需要带设备吗？", a: "如果你需要创作视频、网页或小型 demo，建议携带自己的电脑或常用工具。" },
+                { q: "语言是什么？", a: "以中文为主，必要时可使用英文补充。" },
+                { q: "可以只参加部分活动吗？", a: "可以，但更鼓励参与完整的生活节奏，这会带来更充分的体验。" },
+                { q: "需要很外向吗？", a: "不需要。这个空间也欢迎安静、观察型、慢热的人。" }
+            ];
+
+            return (
+                <div className="max-w-4xl w-full fade-in-up">
+                    <h3 className="text-3xl font-bold serif text-stone-800 mb-12 text-center">常见问题 (Q&A)</h3>
+                    <div className="grid md:grid-cols-2 gap-6">
+                        {faqs.map((item, idx) => (
+                            <div key={idx} className="bg-white p-6 rounded-xl shadow-sm border border-stone-100 hover:shadow-md transition-all">
+                                <h4 className="font-bold text-lg text-indigo-900 mb-2 flex items-start gap-2">
+                                    <span className="text-stone-300">Q.</span> {item.q}
+                                </h4>
+                                <p className="text-stone-600 text-sm leading-relaxed pl-6 border-l-2 border-stone-200">
+                                    {item.a}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const FooterSlide = () => (
+            <div className="max-w-4xl w-full flex flex-col justify-center items-center text-center fade-in-up">
+                <h3 className="text-4xl font-bold serif text-stone-800 mb-8">Ready to Join?</h3>
+                
+                <div className="bg-stone-900 text-white p-8 rounded-2xl w-full max-w-2xl shadow-xl transform transition-transform hover:scale-105">
+                    <h4 className="text-2xl font-bold mb-4">706 良渚 Social Tech</h4>
+                    <p className="mb-8 text-stone-300">
+                        开发者、媒体人与社科生的跨年共创驻留。<br/>
+                        在这里，让情绪被看见，让洞察被转化。
+                    </p>
+                    <button className="bg-white text-stone-900 px-8 py-3 rounded-full font-bold hover:bg-stone-200 transition-colors w-full md:w-auto">
+                        立即报名申请
+                    </button>
+                    <p className="mt-4 text-xs text-stone-500">截止日期：2025.11.30 | 名额有限</p>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-16 text-sm text-stone-500 w-full text-left">
+                    <div>
+                        <h5 className="font-bold text-stone-800 mb-2">关于我们</h5>
+                        <p>706青年空间</p>
+                        <p>Social Tech Lab</p>
+                    </div>
+                    <div>
+                        <h5 className="font-bold text-stone-800 mb-2">社群伙伴</h5>
+                        <div className="space-y-3">
+                            <div>
+                                <p className="font-bold text-stone-700">Way to AGI</p>
+                                <p className="text-xs transform origin-left text-stone-500">中国最大AI爱好者社群</p>
+                            </div>
+                            <div>
+                                <p className="font-bold text-stone-700">跳海酒馆</p>
+                                <p className="text-xs transform origin-left text-stone-500">跨年趴场地支持</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <h5 className="font-bold text-stone-800 mb-2">FAQ</h5>
+                        <p>无需专业背景</p>
+                        <p>自带设备</p>
+                        <p>中文为主</p>
+                    </div>
+                    <div>
+                        <h5 className="font-bold text-stone-800 mb-2">联系方式</h5>
+                        <p>WeChat: wxcwechat</p>
+                    </div>
+                </div>
+                
+                <footer className="mt-12 text-stone-400 text-xs">
+                    &copy; 2025 706 Liangzhu Social Tech. All rights reserved.
+                </footer>
+            </div>
+        );
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
