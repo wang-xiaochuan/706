@@ -1,0 +1,19 @@
+{
+  "_comment": "推送方式选一个填好，其余留空。mode 可选: telegram | dingtalk | feishu | ntfy | none",
+
+  "mode": "none",
+  "minScore": 50,
+
+  "── Telegram ──": "",
+  "tgToken":  "123456:ABC-DEF...",
+  "tgChatId": "你的 chat_id",
+
+  "── 钉钉 ──": "",
+  "ddWebhook": "https://oapi.dingtalk.com/robot/send?access_token=xxx",
+
+  "── 飞书 ──": "",
+  "fsWebhook": "https://open.feishu.cn/open-apis/bot/v2/hook/xxx",
+
+  "── ntfy.sh（最简单，无需注册）──": "",
+  "ntfyTopic": "btc-my-alerts-改成你自己的专属名字"
+}
